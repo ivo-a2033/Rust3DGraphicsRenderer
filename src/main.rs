@@ -109,19 +109,26 @@ fn to_screen(x: f32, y: f32) -> Vec2 {
 #[macroquad::main(window_conf)]
 async fn main() {
 
-    let (models, materials) = tobj::load_obj(
+    let (raw_models, _materials) = tobj::load_obj(
         "copyrightFreeToaster.obj",
-         &tobj::LoadOptions {
-        triangulate: true,
-        ..Default::default()
-    },
+        &tobj::LoadOptions {
+            triangulate: true,
+            ..Default::default()
+        },
     )
     .unwrap();
 
-    let mesh = &models[0].mesh;
+    let mut positions: Vec<f32> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
 
-    println!("vertices: {}", mesh.positions.len() / 3);
-    println!("triangles: {}", mesh.indices.len() / 3);
+    for m in &raw_models {
+        let index_offset = (positions.len() / 3) as u32;
+        positions.extend_from_slice(&m.mesh.positions);
+        indices.extend(m.mesh.indices.iter().map(|i| i + index_offset));
+    }
+
+    println!("vertices: {}", positions.len() / 3);
+    println!("triangles: {}", indices.len() / 3);
 
     
 
@@ -131,18 +138,18 @@ async fn main() {
     loop {
         clear_background(BLACK);
 
-        rotationy += 0.1;
+        rotationy += 0.01;
 
         let mut projected_points = Vec::new();
-        for i in 0..mesh.positions.len()/3 {
+        for i in 0..positions.len()/3 {
             let v = i*3;
-            let mut point = Vec4::new(mesh.positions[v], mesh.positions[v+1] , mesh.positions[v+2], 1.0);
+            let mut point = Vec4::new(positions[v], positions[v+1] , positions[v+2], 1.0);
             let scale = scale_matrix(0.0001, 0.0001, 0.0001);
             point = scale.mul_vec4(point);
             let rot_y = rotate_axis_matrix((0.0,1.0,0.0),rotationy);
             point = rot_y.mul_vec4(point);
 
-            let rot_x = rotate_axis_matrix((1.0,0.0,0.0),-rotationy);
+            let rot_x = rotate_axis_matrix((1.0,0.0,0.0),-rotationy*2.0);
             point = rot_x.mul_vec4(point);
 
 
@@ -160,11 +167,11 @@ async fn main() {
             projected_points.push(proj_point);
         }
 
-        for i in 0..mesh.indices.len()/3 {
+        for i in 0..indices.len()/3 {
             let v = (i*3) as usize;
-            let mut p1 = Vec2::new(projected_points[mesh.indices[v] as usize][0], projected_points[mesh.indices[v] as usize][1]);
-            let mut p2 = Vec2::new(projected_points[mesh.indices[v+1] as usize][0], projected_points[mesh.indices[v+1] as usize][1]);
-            let mut p3 = Vec2::new(projected_points[mesh.indices[v+2] as usize][0], projected_points[mesh.indices[v+2] as usize][1]);
+            let mut p1 = Vec2::new(projected_points[indices[v] as usize][0], projected_points[indices[v] as usize][1]);
+            let mut p2 = Vec2::new(projected_points[indices[v+1] as usize][0], projected_points[indices[v+1] as usize][1]);
+            let mut p3 = Vec2::new(projected_points[indices[v+2] as usize][0], projected_points[indices[v+2] as usize][1]);
 
             p1 = to_screen(p1.x, p1.y);
             p2 = to_screen(p2.x, p2.y);
