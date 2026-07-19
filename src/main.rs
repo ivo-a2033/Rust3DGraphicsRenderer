@@ -82,6 +82,21 @@ fn scale_matrix(sx: f32, sy: f32, sz: f32) -> Mat4 {
     }
 }
 
+fn rotate_axis_matrix(axis: (f32, f32, f32), angle: f32) -> Mat4 {
+    let (x, y, z) = axis; // must be normalized (length 1)
+    let (s, c) = angle.sin_cos();
+    let t = 1.0 - c;
+
+    Mat4 {
+        m: [
+            [t*x*x + c,   t*x*y - s*z, t*x*z + s*y, 0.0],
+            [t*x*y + s*z, t*y*y + c,   t*y*z - s*x, 0.0],
+            [t*x*z - s*y, t*y*z + s*x, t*z*z + c,   0.0],
+            [0.0,         0.0,         0.0,         1.0],
+        ],
+    }
+}
+
 fn to_screen(x: f32, y: f32) -> Vec2 {
     Vec2::new(
         (x + 1.0) * 400.0,
@@ -96,7 +111,10 @@ async fn main() {
 
     let (models, materials) = tobj::load_obj(
         "copyrightFreeToaster.obj",
-        &tobj::LoadOptions::default(),
+         &tobj::LoadOptions {
+        triangulate: true,
+        ..Default::default()
+    },
     )
     .unwrap();
 
@@ -105,30 +123,42 @@ async fn main() {
     println!("vertices: {}", mesh.positions.len() / 3);
     println!("triangles: {}", mesh.indices.len() / 3);
 
-    let mut projected_points = Vec::new();
-    for i in 0..mesh.positions.len()/3 {
-        let v = i*3;
-        let mut point = Vec4::new(mesh.positions[v], mesh.positions[v+1] , mesh.positions[v+2]-10.0, 1.0);
-        let projection = get_proj_mat(1.0,  90f32.to_radians(), 1.0);
-        let scale = scale_matrix(0.0001, 0.0001, 0.0001);
-        point = scale.mul_vec4(point);
-        let mut p = projection.mul_vec4(point);
-
-  
-
-        let ndc_x = p.x / p.w;
-        let ndc_y = p.y / p.w;
-        let ndc_z = p.z / p.w;
-
-        let proj_point = [ndc_x, ndc_y, ndc_z];
-        projected_points.push(proj_point);
-    }
-
     
 
+    
+    let mut rotationy = 0.0;
 
     loop {
         clear_background(BLACK);
+
+        rotationy += 0.1;
+
+        let mut projected_points = Vec::new();
+        for i in 0..mesh.positions.len()/3 {
+            let v = i*3;
+            let mut point = Vec4::new(mesh.positions[v], mesh.positions[v+1] , mesh.positions[v+2], 1.0);
+            let scale = scale_matrix(0.0001, 0.0001, 0.0001);
+            point = scale.mul_vec4(point);
+            let rot_y = rotate_axis_matrix((0.0,1.0,0.0),rotationy);
+            point = rot_y.mul_vec4(point);
+
+            let rot_x = rotate_axis_matrix((1.0,0.0,0.0),-rotationy);
+            point = rot_x.mul_vec4(point);
+
+
+            point.z -= 0.001;
+            let projection = get_proj_mat(1.0,  90f32.to_radians(), 1.0);
+
+            let mut p = projection.mul_vec4(point);
+
+
+            let ndc_x = p.x / p.w;
+            let ndc_y = p.y / p.w;
+            let ndc_z = p.z / p.w;
+
+            let proj_point = [ndc_x, ndc_y, ndc_z];
+            projected_points.push(proj_point);
+        }
 
         for i in 0..mesh.indices.len()/3 {
             let v = (i*3) as usize;
