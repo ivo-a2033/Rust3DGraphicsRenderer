@@ -104,7 +104,22 @@ fn to_screen(x: f32, y: f32) -> Vec2 {
     )
 }
 
-fn get_projected(mut projected_points: Vec<[f32; 3]>, positions: &Vec<f32>, rotationy: f32) -> Vec<[f32; 3]> {
+fn apply_repulsion(point: &mut Vec4, disturb: &Vec2, range: f32) {
+    let dx = point.x - (disturb.x - 400.0) * 0.00001;
+    let dy = point.y - (disturb.y - 400.0) * 0.00001;
+    let dist_sq = dx*dx + dy*dy;
+
+    if dist_sq < range * range {
+        let dist = dist_sq.sqrt().max(0.00001);
+        let falloff = 1.0 - (dist / range);
+        let strength = (falloff * falloff) / dist_sq;
+
+        point.x += dx * strength * 0.00000005;
+        point.y += dy * strength * 0.00000005;
+    }
+}
+
+fn get_projected(mut projected_points: Vec<[f32; 3]>, positions: &Vec<f32>, rotationy: f32, disturb: &Vec2) -> Vec<[f32; 3]> {
     projected_points.clear();
     for i in 0..positions.len()/3 {
         let v = i*3;
@@ -119,6 +134,9 @@ fn get_projected(mut projected_points: Vec<[f32; 3]>, positions: &Vec<f32>, rota
 
 
         point.z -= 0.001;
+
+        apply_repulsion(&mut point, disturb, 0.02);
+
         let projection = get_proj_mat(1.0,  90f32.to_radians(), 1.0);
 
         let mut p = projection.mul_vec4(point);
@@ -146,7 +164,21 @@ fn render(projected_points: Vec<[f32; 3]>, indices: &Vec<u32>){
         p2 = to_screen(p2.x, p2.y);
         p3 = to_screen(p3.x, p3.y);
 
-        draw_triangle(p1,p2,p3, Color::from_rgba(255,255,255,255));
+        //draw_triangle(p1,p2,p3, Color::from_rgba(255,255,255,255));
+
+        use macroquad::models::{Mesh, Vertex};
+        let c1 = Color::from_rgba(255, 0, 0, 255);
+        let c2 = Color::from_rgba(0, 0, 255, 255);
+        let c3 = Color::from_rgba(255, 0, 255, 255);
+
+        let vertices = vec![
+            Vertex { position: vec3(p1.x, p1.y, 0.0), uv: vec2(0.0,0.0), color: c1.into(), normal: vec4(0.,0.,1.,0.) },
+            Vertex { position: vec3(p2.x, p2.y, 0.0), uv: vec2(0.0,0.0), color: c2.into(), normal: vec4(0.,0.,1.,0.) },
+            Vertex { position: vec3(p3.x, p3.y, 0.0), uv: vec2(0.0,0.0), color: c3.into(), normal: vec4(0.,0.,1.,0.) },
+        ];
+        let indices = vec![0, 1, 2];
+
+        draw_mesh(&Mesh { vertices, indices, texture: None });
     }
 }
 
@@ -184,7 +216,10 @@ async fn main() {
 
         rotationy += 0.01;
 
-        projected_points = get_projected(projected_points, &positions, rotationy);
+        let (mouse_x, mouse_y) = mouse_position();
+        let disturb = Vec2::new(mouse_x, mouse_y);
+
+        projected_points = get_projected(projected_points, &positions, rotationy, &disturb);
 
         render(projected_points.clone(), &indices);
 
