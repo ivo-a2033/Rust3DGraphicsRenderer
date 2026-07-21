@@ -104,6 +104,52 @@ fn to_screen(x: f32, y: f32) -> Vec2 {
     )
 }
 
+fn get_projected(mut projected_points: Vec<[f32; 3]>, positions: &Vec<f32>, rotationy: f32) -> Vec<[f32; 3]> {
+    projected_points.clear();
+    for i in 0..positions.len()/3 {
+        let v = i*3;
+        let mut point = Vec4::new(positions[v], positions[v+1] , positions[v+2], 1.0);
+        let scale = scale_matrix(0.0001, 0.0001, 0.0001);
+        point = scale.mul_vec4(point);
+        let rot_y = rotate_axis_matrix((0.0,1.0,0.0),rotationy);
+        point = rot_y.mul_vec4(point);
+
+        let rot_x = rotate_axis_matrix((1.0,0.0,0.0),-rotationy*2.0);
+        point = rot_x.mul_vec4(point);
+
+
+        point.z -= 0.001;
+        let projection = get_proj_mat(1.0,  90f32.to_radians(), 1.0);
+
+        let mut p = projection.mul_vec4(point);
+
+
+        let ndc_x = p.x / p.w;
+        let ndc_y = p.y / p.w;
+        let ndc_z = p.z / p.w;
+
+        let proj_point = [ndc_x, ndc_y, ndc_z];
+        projected_points.push(proj_point);
+    }
+
+    return projected_points;
+}
+
+fn render(projected_points: Vec<[f32; 3]>, indices: &Vec<u32>){
+    for i in 0..indices.len()/3 {
+        let v = (i*3) as usize;
+        let mut p1 = Vec2::new(projected_points[indices[v] as usize][0], projected_points[indices[v] as usize][1]);
+        let mut p2 = Vec2::new(projected_points[indices[v+1] as usize][0], projected_points[indices[v+1] as usize][1]);
+        let mut p3 = Vec2::new(projected_points[indices[v+2] as usize][0], projected_points[indices[v+2] as usize][1]);
+
+        p1 = to_screen(p1.x, p1.y);
+        p2 = to_screen(p2.x, p2.y);
+        p3 = to_screen(p3.x, p3.y);
+
+        draw_triangle(p1,p2,p3, Color::from_rgba(255,255,255,255));
+    }
+}
+
 
 
 #[macroquad::main(window_conf)]
@@ -114,8 +160,8 @@ async fn main() {
         &tobj::LoadOptions {
             triangulate: true,
             ..Default::default()
-        },
-    )
+        }, 
+       )
     .unwrap();
 
     let mut positions: Vec<f32> = Vec::new();
@@ -130,9 +176,7 @@ async fn main() {
     println!("vertices: {}", positions.len() / 3);
     println!("triangles: {}", indices.len() / 3);
 
-    
-
-    
+    let mut projected_points = Vec::new();
     let mut rotationy = 0.0;
 
     loop {
@@ -140,48 +184,9 @@ async fn main() {
 
         rotationy += 0.01;
 
-        let mut projected_points = Vec::new();
-        for i in 0..positions.len()/3 {
-            let v = i*3;
-            let mut point = Vec4::new(positions[v], positions[v+1] , positions[v+2], 1.0);
-            let scale = scale_matrix(0.0001, 0.0001, 0.0001);
-            point = scale.mul_vec4(point);
-            let rot_y = rotate_axis_matrix((0.0,1.0,0.0),rotationy);
-            point = rot_y.mul_vec4(point);
+        projected_points = get_projected(projected_points, &positions, rotationy);
 
-            let rot_x = rotate_axis_matrix((1.0,0.0,0.0),-rotationy*2.0);
-            point = rot_x.mul_vec4(point);
-
-
-            point.z -= 0.001;
-            let projection = get_proj_mat(1.0,  90f32.to_radians(), 1.0);
-
-            let mut p = projection.mul_vec4(point);
-
-
-            let ndc_x = p.x / p.w;
-            let ndc_y = p.y / p.w;
-            let ndc_z = p.z / p.w;
-
-            let proj_point = [ndc_x, ndc_y, ndc_z];
-            projected_points.push(proj_point);
-        }
-
-        for i in 0..indices.len()/3 {
-            let v = (i*3) as usize;
-            let mut p1 = Vec2::new(projected_points[indices[v] as usize][0], projected_points[indices[v] as usize][1]);
-            let mut p2 = Vec2::new(projected_points[indices[v+1] as usize][0], projected_points[indices[v+1] as usize][1]);
-            let mut p3 = Vec2::new(projected_points[indices[v+2] as usize][0], projected_points[indices[v+2] as usize][1]);
-
-            p1 = to_screen(p1.x, p1.y);
-            p2 = to_screen(p2.x, p2.y);
-            p3 = to_screen(p3.x, p3.y);
-
-            draw_triangle(p1,p2,p3, Color::from_rgba(255,255,255,255));
-
-        }
-
-       
+        render(projected_points.clone(), &indices);
 
         next_frame().await;
     }
